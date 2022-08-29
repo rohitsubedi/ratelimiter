@@ -60,7 +60,7 @@ func NewRateLimiterUsingMemory(cacheCleaningInterval time.Duration) Limiter {
 }
 
 func NewRateLimiterUsingRedis(redisConfig *RedisConfig) (Limiter, error) {
-	redisCache, err := newRedisCache(redisConfig.GetHost(), redisConfig.GetPassword())
+	redisCache, err := newRedisCache(redisConfig.getHost(), redisConfig.getPassword())
 	if err != nil {
 		return nil, err
 	}

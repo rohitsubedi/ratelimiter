@@ -5,7 +5,7 @@ type RedisConfig struct {
 	Password string
 }
 
-func (r *RedisConfig) GetHost() string {
+func (r *RedisConfig) getHost() string {
 	if r == nil {
 		return ""
 	}
@@ -13,7 +13,7 @@ func (r *RedisConfig) GetHost() string {
 	return r.Host
 }
 
-func (r *RedisConfig) GetPassword() string {
+func (r *RedisConfig) getPassword() string {
 	if r == nil {
 		return ""
 	}

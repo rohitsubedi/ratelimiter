@@ -12,8 +12,8 @@ func TestValidConfig(t *testing.T) {
 		Password: "def",
 	}
 
-	assert.Equal(t, "abc", conf.GetHost())
-	assert.Equal(t, "def", conf.GetPassword())
+	assert.Equal(t, "abc", conf.getHost())
+	assert.Equal(t, "def", conf.getPassword())
 }
 
 func TestNilConfig(t *testing.T) {
@@ -22,6 +22,6 @@ func TestNilConfig(t *testing.T) {
 	}
 
 	conf := getConfig()
-	assert.Equal(t, "", conf.GetHost())
-	assert.Equal(t, "", conf.GetPassword())
+	assert.Equal(t, "", conf.getHost())
+	assert.Equal(t, "", conf.getPassword())
 }

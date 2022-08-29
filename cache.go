@@ -20,14 +20,10 @@ var (
 	errConnectingRedis           = fmt.Errorf("cache lib: cannot connect to redis server")
 )
 
-type cacheItem struct {
-	expiration int64
-}
-
 type cache struct {
 	mu          sync.RWMutex
 	cacheType   cacheType
-	items       map[string]map[string]cacheItem
+	items       map[string]map[string]int64
 	redisClient *redis.Client
 	cleaner     *cacheCleaner
 }
@@ -49,7 +45,7 @@ func newMemoryCache(cleanerTime time.Duration) *cache {
 
 	cache := &cache{
 		cacheType: cacheTypeMemory,
-		items:     make(map[string]map[string]cacheItem),
+		items:     make(map[string]map[string]int64),
 		cleaner:   cleaner,
 	}
 
@@ -89,13 +85,13 @@ func (c *cache) appendEntry(key string, expirationTime time.Duration) error {
 		defer c.mu.Unlock()
 
 		if v, ok := c.items[key]; ok {
-			v[uuid.NewString()] = cacheItem{expiration: expiration}
+			v[uuid.NewString()] = expiration
 			c.items[key] = v
 			return nil
 		}
 
-		v := make(map[string]cacheItem)
-		v[uuid.NewString()] = cacheItem{expiration: expiration}
+		v := make(map[string]int64)
+		v[uuid.NewString()] = expiration
 		c.items[key] = v
 	case cacheTypeRedis:
 		keyWithPrefix := fmt.Sprintf("%s||%s", uuid.NewString(), key)
@@ -146,8 +142,8 @@ func (c *cache) getValidMemoryCacheCount(key string) (int64, error) {
 	}
 
 	counter := 0
-	for _, v := range items {
-		if v.expiration > 0 && time.Now().UnixNano() > v.expiration {
+	for _, expiration := range items {
+		if expiration > 0 && time.Now().UnixNano() > expiration {
 			continue
 		}
 		counter++
@@ -194,8 +190,8 @@ func (c *cache) getKeysToDelete() map[string][]string {
 	for k, values := range c.items {
 		keysToDelete[k] = []string{}
 
-		for valKey, v := range values {
-			if v.expiration > 0 && time.Now().UnixNano() > v.expiration {
+		for valKey, expiration := range values {
+			if expiration > 0 && time.Now().UnixNano() > expiration {
 				keysToDelete[k] = append(keysToDelete[k], valKey)
 			}
 		}

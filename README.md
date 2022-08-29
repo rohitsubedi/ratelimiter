@@ -3,7 +3,7 @@
 Very esay golang package for ratelimiting the http endpoints based on the value in the request
 
 ## Installation
-    go get github.com/rohitsubedi/ratelimiter@v1.0.0
+    go get github.com/rohitsubedi/ratelimiter@v1.1.0
 
 ## Description
 RateLimiter helps ratelimit the http request based on the config and value to check defined by the user.

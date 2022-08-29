@@ -1,6 +1,6 @@
 # ratelimiter
 
-Very esay golang package for ratelimiting the http endpoints based on the value in the request
+Very basic golang package for ratelimiting the http endpoints based on the value in the request
 
 ## Installation
     go get github.com/rohitsubedi/ratelimiter@v1.2.0

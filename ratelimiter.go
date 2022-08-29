@@ -41,12 +41,13 @@ type Limiter interface {
 		config ConfigReaderInterface,
 		errorResponse HttpResponseFunc,
 		rateLimitValueFunc RateLimitValueFunc,
-		logger interface{},
 	) HandlerWrapperFunc
+	SetLogger(logger LeveledLogger)
 }
 
 type limiter struct {
-	cache *cache
+	cache  *cache
+	logger interface{}
 }
 
 func NewRateLimiterUsingMemory(cacheCleaningInterval time.Duration) Limiter {
@@ -55,7 +56,8 @@ func NewRateLimiterUsingMemory(cacheCleaningInterval time.Duration) Limiter {
 	}
 
 	return &limiter{
-		cache: newMemoryCache(cacheCleaningInterval),
+		cache:  newMemoryCache(cacheCleaningInterval),
+		logger: log.Default(),
 	}
 }
 
@@ -66,10 +68,16 @@ func NewRateLimiterUsingRedis(redisConfig *RedisConfig) (Limiter, error) {
 	}
 
 	rateLimiter := &limiter{
-		cache: redisCache,
+		cache:  redisCache,
+		logger: log.Default(),
 	}
 
 	return rateLimiter, nil
+}
+
+// SetLogger sets your own logger. Pass nil if you don't want to log anything
+func (l *limiter) SetLogger(logger LeveledLogger) {
+	l.logger = logger
 }
 
 func (l *limiter) RateLimit(
@@ -78,7 +86,6 @@ func (l *limiter) RateLimit(
 	config ConfigReaderInterface,
 	errorResponse HttpResponseFunc,
 	rateLimitValueFunc RateLimitValueFunc,
-	logger interface{},
 ) HandlerWrapperFunc {
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
@@ -86,7 +93,7 @@ func (l *limiter) RateLimit(
 
 	return func(writer http.ResponseWriter, req *http.Request) {
 		if rateLimitValueFunc == nil {
-			logInfo(logger, msgRateLimitValueFuncIsNil)
+			logInfo(l.logger, msgRateLimitValueFuncIsNil)
 			fn(writer, req)
 
 			return
@@ -94,14 +101,14 @@ func (l *limiter) RateLimit(
 
 		rateLimitValue := rateLimitValueFunc(req)
 		if rateLimitValue == "" {
-			logInfo(logger, msgRateLimitValueEmpty)
+			logInfo(l.logger, msgRateLimitValueEmpty)
 			fn(writer, req)
 
 			return
 		}
 		// Check if config says that the rateLimit value should skip rateLimiter check
 		if config != nil && config.ShouldSkipRateLimitCheck(rateLimitValue) {
-			logInfo(logger, msgRateLimitValueSkipped)
+			logInfo(l.logger, msgRateLimitValueSkipped)
 			fn(writer, req)
 
 			return
@@ -111,7 +118,7 @@ func (l *limiter) RateLimit(
 
 		val, err := l.cache.getValidCacheCount(cacheKey)
 		if err != nil {
-			logError(logger, ErrMsgGettingValueFromCache)
+			logError(l.logger, ErrMsgGettingValueFromCache)
 			predefinedResponse(errorResponse, writer, ErrMsgGettingValueFromCache)
 
 			return
@@ -123,7 +130,7 @@ func (l *limiter) RateLimit(
 		}
 
 		if val >= maxRequestAllowedInTimeFrame {
-			logError(logger, ErrMsgPossibleBruteForceAttack)
+			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
 			return
@@ -135,7 +142,7 @@ func (l *limiter) RateLimit(
 		}
 
 		if err := l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck); err != nil {
-			logError(logger, errMsgWritingValueFromCache)
+			logError(l.logger, errMsgWritingValueFromCache)
 		}
 
 		fn(writer, req)
@@ -153,6 +160,10 @@ func predefinedResponse(response HttpResponseFunc, writer http.ResponseWriter, m
 }
 
 func logInfo(logger interface{}, msg string) {
+	if logger == nil {
+		return
+	}
+
 	switch l := logger.(type) {
 	case LeveledLogger:
 		l.Info(msg)
@@ -162,6 +173,10 @@ func logInfo(logger interface{}, msg string) {
 }
 
 func logError(logger interface{}, msg string) {
+	if logger == nil {
+		return
+	}
+
 	switch l := logger.(type) {
 	case LeveledLogger:
 		l.Error(msg)

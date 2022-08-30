@@ -3,7 +3,7 @@
 Very basic golang package for ratelimiting the http endpoints based on the value in the request
 
 ## Installation
-    go get github.com/rohitsubedi/ratelimiter@v1.2.0
+    go get github.com/rohitsubedi/ratelimiter@v1.2.1
 
 ## Description
 RateLimiter helps ratelimit the http request based on the config and value to check defined by the user.
@@ -17,8 +17,7 @@ limiter.RateLimit(handlerFunc, urlPath, config, errorResponseFunc, rateLimitValu
 
 handlerFunc = func(res http.ResponseWriter, req *http.Request) // Your http handler
 urlPath = string (Name of your handler)
-config = This must follow the ConfigReaderInterface
-    ConfigReaderInterface has 3 methods
+config = This must follow the ConfigReaderInterface. ConfigReaderInterface has 3 methods
     GetTimeFrameDurationToCheckRequests(path string) time.Duration // This returns the time frame in which the total request is counted
     GetMaxRequestAllowedPerTimeFrame(path string) int64 // Total request allwed in the time frame. If request exceed this value, it will execute errorResponseFunc
     ShouldSkipRateLimitCheck(rateLimitValue string) bool // Skip rate limit if return true

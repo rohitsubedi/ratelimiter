@@ -20,10 +20,15 @@ var (
 	errConnectingRedis           = fmt.Errorf("cache lib: cannot connect to redis server")
 )
 
+type cacheItem struct {
+	expiration int64
+	child      *cacheItem
+}
+
 type cache struct {
 	mu          sync.RWMutex
 	cacheType   cacheType
-	items       map[string]map[string]int64
+	items       map[string]*cacheItem
 	redisClient *redis.Client
 	cleaner     *cacheCleaner
 }
@@ -45,7 +50,7 @@ func newMemoryCache(cleanerTime time.Duration) *cache {
 
 	cache := &cache{
 		cacheType: cacheTypeMemory,
-		items:     make(map[string]map[string]int64),
+		items:     make(map[string]*cacheItem),
 		cleaner:   cleaner,
 	}
 
@@ -84,15 +89,14 @@ func (c *cache) appendEntry(key string, expirationTime time.Duration) error {
 		c.mu.Lock()
 		defer c.mu.Unlock()
 
+		item := &cacheItem{expiration: expiration}
 		if v, ok := c.items[key]; ok {
-			v[uuid.NewString()] = expiration
-			c.items[key] = v
+			item.child = v
+			c.items[key] = item
 			return nil
 		}
 
-		v := make(map[string]int64)
-		v[uuid.NewString()] = expiration
-		c.items[key] = v
+		c.items[key] = item
 	case cacheTypeRedis:
 		keyWithPrefix := fmt.Sprintf("%s||%s", uuid.NewString(), key)
 		if err := c.redisClient.Set(context.Background(), keyWithPrefix, uuid.NewString(), expirationTime).Err(); err != nil {
@@ -136,17 +140,22 @@ func (c *cache) getValidMemoryCacheCount(key string) (int64, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	items, found := c.items[key]
+	item, found := c.items[key]
 	if !found {
 		return 0, nil
 	}
 
 	counter := 0
-	for _, expiration := range items {
-		if expiration > 0 && time.Now().UnixNano() > expiration {
-			continue
+	for {
+		if item.expiration > 0 && time.Now().UnixNano() > item.expiration {
+			break
 		}
 		counter++
+		item = item.child
+
+		if item == nil {
+			break
+		}
 	}
 
 	return int64(counter), nil
@@ -164,9 +173,7 @@ func (c *cache) cleanExpiredMemoryCache(cleanerTime time.Duration) {
 		for {
 			select {
 			case <-c.cleaner.interval.C:
-				keysToDelete := c.getKeysToDelete()
-				c.batchDeleteFromMap(keysToDelete)
-
+				c.unlinkExpiredCache()
 				c.cleaner.interval.Reset(cleanerTime)
 			case <-c.cleaner.stop:
 				c.cleaner.interval.Stop()
@@ -180,39 +187,25 @@ func stopCleaningRoutine(cleaner *cacheCleaner) {
 	cleaner.stop <- true
 }
 
-// get keys of all the cache that are expired
-func (c *cache) getKeysToDelete() map[string][]string {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	keysToDelete := make(map[string][]string)
-
-	for k, values := range c.items {
-		keysToDelete[k] = []string{}
-
-		for valKey, expiration := range values {
-			if expiration > 0 && time.Now().UnixNano() > expiration {
-				keysToDelete[k] = append(keysToDelete[k], valKey)
-			}
-		}
-	}
-
-	return keysToDelete
-}
-
 // delete all keys from the memory cache
-func (c *cache) batchDeleteFromMap(keyMap map[string][]string) {
+func (c *cache) unlinkExpiredCache() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	for k, subKeys := range keyMap {
-		for _, subKey := range subKeys {
-			delete(c.items[k], subKey)
-		}
+	for k, item := range c.items {
+		for {
+			if item.expiration > 0 && time.Now().UnixNano() > item.expiration {
+				if item.child != nil {
+					item.child = nil
+				} else {
+					delete(c.items, k)
+				}
+				break
+			}
 
-		if len(c.items[k]) == 0 {
-			delete(c.items, k)
+			if item.child == nil {
+				break
+			}
 		}
 	}
-
 }

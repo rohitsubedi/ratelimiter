@@ -1,13 +1,14 @@
 # ratelimiter
+RateLimiter helps ratelimit the http request based on the config and value to check defined by the user.
+For eg. Possible brute force can be detected and request will not be passed through the service
 
-Very basic golang package for ratelimiting the http endpoints based on the value in the request
+
 
 ## Installation
     go get github.com/rohitsubedi/ratelimiter@v1.2.1
 
-## Description
-RateLimiter helps ratelimit the http request based on the config and value to check defined by the user.
-For eg. Possible brute force can be detected and request will not be passed through the service
+## Testing
+    make test
 
 ## Avalilable methods
 ### RateLimit using system memory

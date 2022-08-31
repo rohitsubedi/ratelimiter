@@ -21,7 +21,7 @@ const (
 type config struct{}
 
 func (c *config) GetTimeFrameDurationToCheckRequests(path string) time.Duration {
-	return 10 * time.Second
+	return 2 * time.Second
 }
 
 func (c *config) GetMaxRequestAllowedPerTimeFrame(path string) int64 {

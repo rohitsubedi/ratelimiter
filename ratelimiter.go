@@ -91,6 +91,16 @@ func (l *limiter) RateLimit(
 		log.Fatal("Empty handler wrapper function")
 	}
 
+	maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
+	if config != nil {
+		maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(urlPath)
+	}
+
+	defaultTimeFrameDurationToCheck := defaultTimeToCheckForRateLimit
+	if config != nil {
+		defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(urlPath)
+	}
+
 	return func(writer http.ResponseWriter, req *http.Request) {
 		if rateLimitValueFunc == nil {
 			logInfo(l.logger, msgRateLimitValueFuncIsNil)
@@ -124,25 +134,13 @@ func (l *limiter) RateLimit(
 			return
 		}
 
-		maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
-		if config != nil {
-			maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(urlPath)
-		}
+		_ = l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck)
 
 		if val >= maxRequestAllowedInTimeFrame {
 			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
 			return
-		}
-
-		defaultTimeFrameDurationToCheck := defaultTimeToCheckForRateLimit
-		if config != nil {
-			defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(urlPath)
-		}
-
-		if err := l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck); err != nil {
-			logError(l.logger, errMsgWritingValueFromCache)
 		}
 
 		fn(writer, req)

@@ -9,7 +9,7 @@ import (
 )
 
 func TestDefaultCache(t *testing.T) {
-	cacheTime := 2 * time.Second
+	cacheTime := 1 * time.Second
 	cacheKey := uuid.New().String()
 
 	c := newMemoryCache(cacheTime)
@@ -33,7 +33,7 @@ func TestDefaultCache(t *testing.T) {
 
 // To run this test run this command first: "docker-compose up -d"
 func TestDefaultRedisCache(t *testing.T) {
-	cacheTime := 2 * time.Second
+	cacheTime := 1 * time.Second
 	cacheKey := uuid.New().String()
 
 	c, err := newRedisCache("0.0.0.0:6379", "redis_password")

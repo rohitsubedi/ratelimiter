@@ -5,7 +5,7 @@ For eg. Possible brute force can be detected and request will not be passed thro
 
 
 ## Installation
-    go get github.com/rohitsubedi/ratelimiter@v1.2.1
+    go get github.com/rohitsubedi/ratelimiter@v1.2.2
 
 ## Testing
     make test

@@ -11,7 +11,6 @@ const (
 	ErrMsgGettingValueFromCache    = "Error getting value from cache"
 	ErrMsgPossibleBruteForceAttack = "Possible Brute Force Attack"
 
-	errMsgWritingValueFromCache     = "Error writing value to cache"
 	msgRateLimitValueEmpty          = "Rate Limit value is empty"
 	msgRateLimitValueFuncIsNil      = "Rate Limit value function is nil"
 	msgRateLimitValueSkipped        = "Rate Limit check skipped"

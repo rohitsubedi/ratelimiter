@@ -91,17 +91,17 @@ func (l *limiter) RateLimit(
 		log.Fatal("Empty handler wrapper function")
 	}
 
-	maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
-	if config != nil {
-		maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(urlPath)
-	}
-
-	defaultTimeFrameDurationToCheck := defaultTimeToCheckForRateLimit
-	if config != nil {
-		defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(urlPath)
-	}
-
 	return func(writer http.ResponseWriter, req *http.Request) {
+		maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
+		if config != nil {
+			maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(urlPath)
+		}
+
+		defaultTimeFrameDurationToCheck := defaultTimeToCheckForRateLimit
+		if config != nil {
+			defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(urlPath)
+		}
+
 		if rateLimitValueFunc == nil {
 			logInfo(l.logger, msgRateLimitValueFuncIsNil)
 			fn(writer, req)

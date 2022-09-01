@@ -20,12 +20,12 @@ const (
 
 type HandlerWrapperFunc func(res http.ResponseWriter, req *http.Request)
 type HttpResponseFunc func(w http.ResponseWriter, message string)
-type RateLimitValueFunc func(req *http.Request) string
+type RateLimitKeyFunc func(req *http.Request) string
 
 type ConfigReaderInterface interface {
 	GetTimeFrameDurationToCheckRequests(path string) time.Duration
 	GetMaxRequestAllowedPerTimeFrame(path string) int64
-	ShouldSkipRateLimitCheck(rateLimitValue string) bool
+	ShouldSkipRateLimitCheck(rateLimitKey string) bool
 }
 
 type LeveledLogger interface {
@@ -39,7 +39,7 @@ type Limiter interface {
 		urlPath string,
 		config ConfigReaderInterface,
 		errorResponse HttpResponseFunc,
-		rateLimitValueFunc RateLimitValueFunc,
+		rateLimitValueFunc RateLimitKeyFunc,
 	) HandlerWrapperFunc
 	SetLogger(logger LeveledLogger)
 }
@@ -81,10 +81,10 @@ func (l *limiter) SetLogger(logger LeveledLogger) {
 
 func (l *limiter) RateLimit(
 	fn HandlerWrapperFunc,
-	urlPath string,
+	path string,
 	config ConfigReaderInterface,
 	errorResponse HttpResponseFunc,
-	rateLimitValueFunc RateLimitValueFunc,
+	rateLimitKeyFunc RateLimitKeyFunc,
 ) HandlerWrapperFunc {
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
@@ -93,37 +93,37 @@ func (l *limiter) RateLimit(
 	return func(writer http.ResponseWriter, req *http.Request) {
 		maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
 		if config != nil {
-			maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(urlPath)
+			maxRequestAllowedInTimeFrame = config.GetMaxRequestAllowedPerTimeFrame(path)
 		}
 
 		defaultTimeFrameDurationToCheck := defaultTimeToCheckForRateLimit
 		if config != nil {
-			defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(urlPath)
+			defaultTimeFrameDurationToCheck = config.GetTimeFrameDurationToCheckRequests(path)
 		}
 
-		if rateLimitValueFunc == nil {
+		if rateLimitKeyFunc == nil {
 			logInfo(l.logger, msgRateLimitValueFuncIsNil)
 			fn(writer, req)
 
 			return
 		}
 
-		rateLimitValue := rateLimitValueFunc(req)
-		if rateLimitValue == "" {
+		rateLimitKey := rateLimitKeyFunc(req)
+		if rateLimitKey == "" {
 			logInfo(l.logger, msgRateLimitValueEmpty)
 			fn(writer, req)
 
 			return
 		}
 		// Check if config says that the rateLimit value should skip rateLimiter check
-		if config != nil && config.ShouldSkipRateLimitCheck(rateLimitValue) {
+		if config != nil && config.ShouldSkipRateLimitCheck(rateLimitKey) {
 			logInfo(l.logger, msgRateLimitValueSkipped)
 			fn(writer, req)
 
 			return
 		}
 
-		cacheKey := fmt.Sprintf("%s:%s", urlPath, rateLimitValue)
+		cacheKey := fmt.Sprintf("%s:%s", path, rateLimitKey)
 
 		val, err := l.cache.getValidCacheCount(cacheKey)
 		if err != nil {
@@ -133,14 +133,14 @@ func (l *limiter) RateLimit(
 			return
 		}
 
-		_ = l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck)
-
 		if val >= maxRequestAllowedInTimeFrame {
 			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
 			return
 		}
+
+		_ = l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck)
 
 		fn(writer, req)
 	}

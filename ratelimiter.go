@@ -15,7 +15,7 @@ const (
 	msgRateLimitValueFuncIsNil      = "Rate Limit value function is nil"
 	msgRateLimitValueSkipped        = "Rate Limit check skipped"
 	defaultTimeToCheckForRateLimit  = 10 * time.Minute
-	maxNumberOfRequestAllowedInTime = int64(100)
+	maxNumberOfRequestAllowedInTime = 100
 )
 
 type HandlerWrapperFunc func(res http.ResponseWriter, req *http.Request)
@@ -24,8 +24,13 @@ type RateLimitKeyFunc func(req *http.Request) string
 
 type ConfigReaderInterface interface {
 	GetTimeFrameDurationToCheckRequests(path string) time.Duration
-	GetMaxRequestAllowedPerTimeFrame(path string) int64
+	GetMaxRequestAllowedPerTimeFrame(path string) int
 	ShouldSkipRateLimitCheck(rateLimitKey string) bool
+}
+
+type cacheInterface interface {
+	AppendEntry(key string, expirationTime time.Duration) error
+	GetCount(key string) (int, error)
 }
 
 type LeveledLogger interface {
@@ -45,7 +50,7 @@ type Limiter interface {
 }
 
 type limiter struct {
-	cache  *cache
+	cache  cacheInterface
 	logger interface{}
 }
 
@@ -125,7 +130,7 @@ func (l *limiter) RateLimit(
 
 		cacheKey := fmt.Sprintf("%s:%s", path, rateLimitKey)
 
-		val, err := l.cache.getValidCacheCount(cacheKey)
+		val, err := l.cache.GetCount(cacheKey)
 		if err != nil {
 			logError(l.logger, ErrMsgGettingValueFromCache)
 			predefinedResponse(errorResponse, writer, ErrMsgGettingValueFromCache)
@@ -133,14 +138,14 @@ func (l *limiter) RateLimit(
 			return
 		}
 
+		_ = l.cache.AppendEntry(cacheKey, defaultTimeFrameDurationToCheck)
+
 		if val >= maxRequestAllowedInTimeFrame {
 			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
 			return
 		}
-
-		_ = l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck)
 
 		fn(writer, req)
 	}

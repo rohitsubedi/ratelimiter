@@ -24,7 +24,7 @@ func (c *config) GetTimeFrameDurationToCheckRequests(path string) time.Duration 
 	return 2 * time.Second
 }
 
-func (c *config) GetMaxRequestAllowedPerTimeFrame(path string) int64 {
+func (c *config) GetMaxRequestAllowedPerTimeFrame(path string) int {
 	return 10
 }
 
@@ -53,7 +53,7 @@ func TestRateLimitInMemory(t *testing.T) {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue
@@ -90,7 +90,7 @@ func TestRateLimitInMemoryWithNilLogger(t *testing.T) {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue
@@ -218,11 +218,11 @@ func TestRateLimitInRedis(t *testing.T) {
 	conf := new(config)
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, nil, limitValFunc)
 
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue

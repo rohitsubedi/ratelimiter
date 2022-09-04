@@ -117,13 +117,16 @@ func (m *memoryCache) unlinkExpiredCache() {
 
 	for k, item := range m.items {
 		expirationDuration := m.latestExpiry[k]
+		count := 0
 		for {
 			if time.Now().After(item.creationTime.Add(expirationDuration)) {
-				if item.child != nil {
-					item.child = nil
-				} else {
+				// If first item is expired, we delete all the entry of the items
+				if count == 0 {
 					delete(m.items, k)
+					break
 				}
+
+				item.child = nil
 				break
 			}
 
@@ -132,6 +135,7 @@ func (m *memoryCache) unlinkExpiredCache() {
 			}
 
 			item = item.child
+			count++
 		}
 	}
 }

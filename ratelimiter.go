@@ -32,7 +32,6 @@ type ConfigReaderInterface interface {
 type cacheInterface interface {
 	appendEntry(key string, expirationTime time.Duration) error
 	getCount(key string, expirationTime time.Duration) int
-	addConfig(config ConfigReaderInterface)
 }
 
 type LeveledLogger interface {
@@ -96,7 +95,6 @@ func (l *limiter) RateLimit(
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
 	}
-	l.cache.addConfig(config)
 
 	return func(writer http.ResponseWriter, req *http.Request) {
 		maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime

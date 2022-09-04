@@ -69,5 +69,3 @@ func (r *redisCache) getCount(key string, expirationDuration time.Duration) (cou
 
 	return count
 }
-
-func (m *redisCache) addConfig(_ ConfigReaderInterface) {}

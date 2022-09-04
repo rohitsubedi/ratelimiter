@@ -2,15 +2,13 @@ package ratelimiter
 
 import (
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 )
 
 type cacheItem struct {
-	creationTime   time.Time
-	expiryDuration time.Duration
-	child          *cacheItem
+	creationTime time.Time
+	child        *cacheItem
 }
 
 type cacheCleaner struct {
@@ -19,10 +17,10 @@ type cacheCleaner struct {
 }
 
 type memoryCache struct {
-	mu      sync.RWMutex
-	items   map[string]*cacheItem
-	cleaner *cacheCleaner
-	config  ConfigReaderInterface
+	mu           sync.RWMutex
+	items        map[string]*cacheItem
+	latestExpiry map[string]time.Duration
+	cleaner      *cacheCleaner
 }
 
 func newMemoryCache(cleaningTime time.Duration) cacheInterface {
@@ -35,8 +33,9 @@ func newMemoryCache(cleaningTime time.Duration) cacheInterface {
 	}
 
 	cache := &memoryCache{
-		items:   make(map[string]*cacheItem),
-		cleaner: cleaner,
+		items:        make(map[string]*cacheItem),
+		latestExpiry: make(map[string]time.Duration),
+		cleaner:      cleaner,
 	}
 
 	cache.cleanExpiredMemoryCache(cleaningTime)
@@ -48,7 +47,9 @@ func (m *memoryCache) appendEntry(key string, expiryDuration time.Duration) erro
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item := &cacheItem{creationTime: time.Now(), expiryDuration: expiryDuration}
+	m.latestExpiry[key] = expiryDuration
+
+	item := &cacheItem{creationTime: time.Now()}
 	if v, ok := m.items[key]; ok {
 		item.child = v
 	}
@@ -60,6 +61,8 @@ func (m *memoryCache) appendEntry(key string, expiryDuration time.Duration) erro
 func (m *memoryCache) getCount(key string, expirationDuration time.Duration) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
+
+	m.latestExpiry[key] = expirationDuration
 
 	item, found := m.items[key]
 	if !found {
@@ -80,10 +83,6 @@ func (m *memoryCache) getCount(key string, expirationDuration time.Duration) int
 	}
 
 	return counter
-}
-
-func (m *memoryCache) addConfig(config ConfigReaderInterface) {
-	m.config = config
 }
 
 func (m *memoryCache) cleanExpiredMemoryCache(cleanerTime time.Duration) {
@@ -116,18 +115,9 @@ func (m *memoryCache) unlinkExpiredCache() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	var expirationDuration time.Duration
-
 	for k, item := range m.items {
-		path := strings.Split(k, cachePathKeySeparator)[0]
-		if m.config != nil {
-			expirationDuration = m.config.GetTimeFrameDurationToCheckRequests(path)
-		}
+		expirationDuration := m.latestExpiry[k]
 		for {
-			if expirationDuration == 0 {
-				expirationDuration = item.expiryDuration
-			}
-
 			if time.Now().After(item.creationTime.Add(expirationDuration)) {
 				if item.child != nil {
 					item.child = nil

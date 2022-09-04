@@ -1,7 +1,6 @@
 package ratelimiter
 
 import (
-	"fmt"
 	"runtime"
 	"strings"
 	"sync"
@@ -98,9 +97,7 @@ func (m *memoryCache) cleanExpiredMemoryCache(cleanerTime time.Duration) {
 		for {
 			select {
 			case <-m.cleaner.interval.C:
-				fmt.Println("Clean cache running", time.Now().Format(time.Kitchen))
 				m.unlinkExpiredCache()
-				fmt.Println("Clean cache finished", time.Now().Format(time.Kitchen))
 				m.cleaner.interval.Reset(cleanerTime)
 			case <-m.cleaner.stop:
 				m.cleaner.interval.Stop()

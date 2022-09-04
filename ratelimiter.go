@@ -152,7 +152,7 @@ func predefinedResponse(response HttpResponseFunc, writer http.ResponseWriter, m
 	}
 
 	writer.WriteHeader(http.StatusBadRequest)
-	writer.Write([]byte(msg))
+	_, _ = writer.Write([]byte(msg))
 }
 
 func logInfo(logger interface{}, msg string) {

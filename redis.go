@@ -11,6 +11,7 @@ import (
 
 var (
 	errConnectingRedis = fmt.Errorf("cache lib: cannot connect to redis server")
+	timeFormatForRedis = time.RFC3339Nano
 )
 
 type redisCache struct {
@@ -35,7 +36,7 @@ func newRedisCache(host, password string) (cacheInterface, error) {
 func (r *redisCache) appendEntry(key string, expirationDuration time.Duration) error {
 	previousValue := r.redisClient.Get(context.Background(), key).Val()
 
-	currentValue := time.Now().Format(time.RFC3339Nano)
+	currentValue := time.Now().Format(timeFormatForRedis)
 	if previousValue != "" {
 		currentValue = fmt.Sprintf("%s,%s", currentValue, previousValue)
 	}
@@ -49,8 +50,12 @@ func (r *redisCache) appendEntry(key string, expirationDuration time.Duration) e
 
 func (r *redisCache) getCount(key string, expirationDuration time.Duration) (count int) {
 	currentValue := r.redisClient.Get(context.Background(), key).Val()
+	if currentValue == "" {
+		return 0
+	}
+
 	for _, v := range strings.Split(currentValue, ",") {
-		itemCreatedTime, err := time.Parse(time.RFC3339Nano, v)
+		itemCreatedTime, err := time.Parse(timeFormatForRedis, v)
 		if err != nil {
 			continue
 		}

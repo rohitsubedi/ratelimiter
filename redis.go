@@ -3,7 +3,7 @@ package ratelimiter
 import (
 	"context"
 	"fmt"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -12,27 +12,6 @@ import (
 var (
 	errConnectingRedis = fmt.Errorf("cache lib: cannot connect to redis server")
 )
-
-type RedisConfig struct {
-	Host     string
-	Password string
-}
-
-func (r *RedisConfig) getHost() string {
-	if r == nil {
-		return ""
-	}
-
-	return r.Host
-}
-
-func (r *RedisConfig) getPassword() string {
-	if r == nil {
-		return ""
-	}
-
-	return r.Password
-}
 
 type redisCache struct {
 	redisClient *redis.Client
@@ -53,33 +32,37 @@ func newRedisCache(host, password string) (cacheInterface, error) {
 	}, nil
 }
 
-func (r *redisCache) AppendEntry(key string, expirationTime time.Duration) error {
-	prevValue, err := r.getByKey(key)
-	if err != nil {
-		return err
+func (r *redisCache) appendEntry(key string, expirationDuration time.Duration) error {
+	previousValue := r.redisClient.Get(context.Background(), key).Val()
+
+	currentValue := time.Now().Format(time.RFC3339Nano)
+	if previousValue != "" {
+		currentValue = fmt.Sprintf("%s,%s", currentValue, previousValue)
 	}
 
-	if err := r.redisClient.Set(context.Background(), key, prevValue+1, expirationTime).Err(); err != nil {
+	if err := r.redisClient.Set(context.Background(), key, currentValue, expirationDuration).Err(); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (r *redisCache) GetCount(key string) (int, error) {
-	value, err := r.getByKey(key)
-	if err != nil {
-		return 0, err
+func (r *redisCache) getCount(key string, expirationDuration time.Duration) (count int) {
+	currentValue := r.redisClient.Get(context.Background(), key).Val()
+	for _, v := range strings.Split(currentValue, ",") {
+		itemCreatedTime, err := time.Parse(time.RFC3339Nano, v)
+		if err != nil {
+			continue
+		}
+
+		if time.Now().After(itemCreatedTime.Add(expirationDuration)) {
+			break
+		}
+
+		count++
 	}
 
-	return value, nil
+	return count
 }
 
-func (r *redisCache) getByKey(key string) (int, error) {
-	value := r.redisClient.Get(context.Background(), key).Val()
-	if value == "" {
-		return 0, nil
-	}
-
-	return strconv.Atoi(value)
-}
+func (m *redisCache) addConfig(_ ConfigReaderInterface) {}

@@ -13,14 +13,12 @@ func TestDefaultCache(t *testing.T) {
 	cacheKey := uuid.New().String()
 
 	c := newMemoryCache(cacheTime)
-	err := c.AppendEntry(cacheKey, cacheTime)
+	err := c.appendEntry(cacheKey, cacheTime)
 	assert.NoError(t, err)
-	val, err := c.GetCount(cacheKey)
-	assert.NoError(t, err)
+	val := c.getCount(cacheKey, cacheTime)
 	assert.Equal(t, val, 1)
 
 	time.Sleep(cacheTime) // cache counter should be deleted
-	val, err = c.GetCount(cacheKey)
-	assert.NoError(t, err)
+	val = c.getCount(cacheKey, cacheTime)
 	assert.Equal(t, val, 0)
 }

@@ -1,14 +1,17 @@
 package ratelimiter
 
 import (
+	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
 
 type cacheItem struct {
-	expiration time.Time
-	child      *cacheItem
+	creationTime   time.Time
+	expiryDuration time.Duration
+	child          *cacheItem
 }
 
 type cacheCleaner struct {
@@ -20,6 +23,7 @@ type memoryCache struct {
 	mu      sync.RWMutex
 	items   map[string]*cacheItem
 	cleaner *cacheCleaner
+	config  ConfigReaderInterface
 }
 
 func newMemoryCache(cleaningTime time.Duration) cacheInterface {
@@ -41,11 +45,11 @@ func newMemoryCache(cleaningTime time.Duration) cacheInterface {
 	return cache
 }
 
-func (m *memoryCache) AppendEntry(key string, expirationTime time.Duration) error {
+func (m *memoryCache) appendEntry(key string, expiryDuration time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	item := &cacheItem{expiration: time.Now().Add(expirationTime)}
+	item := &cacheItem{creationTime: time.Now(), expiryDuration: expiryDuration}
 	if v, ok := m.items[key]; ok {
 		item.child = v
 	}
@@ -54,18 +58,18 @@ func (m *memoryCache) AppendEntry(key string, expirationTime time.Duration) erro
 	return nil
 }
 
-func (m *memoryCache) GetCount(key string) (int, error) {
+func (m *memoryCache) getCount(key string, expirationDuration time.Duration) int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	item, found := m.items[key]
 	if !found {
-		return 0, nil
+		return 0
 	}
 
 	counter := 0
 	for {
-		if time.Now().After(item.expiration) {
+		if time.Now().After(item.creationTime.Add(expirationDuration)) {
 			break
 		}
 		counter++
@@ -76,7 +80,11 @@ func (m *memoryCache) GetCount(key string) (int, error) {
 		}
 	}
 
-	return counter, nil
+	return counter
+}
+
+func (m *memoryCache) addConfig(config ConfigReaderInterface) {
+	m.config = config
 }
 
 func (m *memoryCache) cleanExpiredMemoryCache(cleanerTime time.Duration) {
@@ -90,7 +98,9 @@ func (m *memoryCache) cleanExpiredMemoryCache(cleanerTime time.Duration) {
 		for {
 			select {
 			case <-m.cleaner.interval.C:
+				fmt.Println("Clean cache running", time.Now().Format(time.Kitchen))
 				m.unlinkExpiredCache()
+				fmt.Println("Clean cache finished", time.Now().Format(time.Kitchen))
 				m.cleaner.interval.Reset(cleanerTime)
 			case <-m.cleaner.stop:
 				m.cleaner.interval.Stop()
@@ -109,9 +119,19 @@ func (m *memoryCache) unlinkExpiredCache() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	var expirationDuration time.Duration
+
 	for k, item := range m.items {
+		path := strings.Split(k, cachePathKeySeparator)[0]
+		if m.config != nil {
+			expirationDuration = m.config.GetTimeFrameDurationToCheckRequests(path)
+		}
 		for {
-			if time.Now().After(item.expiration) {
+			if expirationDuration == 0 {
+				expirationDuration = item.expiryDuration
+			}
+
+			if time.Now().After(item.creationTime.Add(expirationDuration)) {
 				if item.child != nil {
 					item.child = nil
 				} else {
@@ -123,6 +143,8 @@ func (m *memoryCache) unlinkExpiredCache() {
 			if item.child == nil {
 				break
 			}
+
+			item = item.child
 		}
 	}
 }

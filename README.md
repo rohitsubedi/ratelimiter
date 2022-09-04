@@ -5,7 +5,7 @@ For eg. Possible brute force can be detected and request will not be passed thro
 
 
 ## Installation
-    go get github.com/rohitsubedi/ratelimiter@v1.2.3
+    go get github.com/rohitsubedi/ratelimiter@v1.3.0
 
 ## Testing
     make test
@@ -14,10 +14,10 @@ For eg. Possible brute force can be detected and request will not be passed thro
 ### RateLimit using system memory
 ```go
 limiter := ratelimiter.NewRateLimiterUsingMemory(cacheCleaningInterval)
-limiter.RateLimit(handlerFunc, urlPath, config, errorResponseFunc, rateLimitValueFunc)
+limiter.RateLimit(handlerFunc, path, config, errorResponseFunc, rateLimitValueFunc)
 
 handlerFunc = func(res http.ResponseWriter, req *http.Request) // Your http handler
-urlPath = string (Name of your handler)
+path = string (Name of your handler/ identifier)
 config = This must follow the ConfigReaderInterface. ConfigReaderInterface has 3 methods
     GetTimeFrameDurationToCheckRequests(path string) time.Duration // This returns the time frame in which the total request is counted
     GetMaxRequestAllowedPerTimeFrame(path string) int64 // Total request allwed in the time frame. If request exceed this value, it will execute errorResponseFunc
@@ -27,14 +27,10 @@ rateLimitValueFunc = func(req *http.Request) string // This should return the va
 ```
 ### RateLimit using redis
 ```go
-limiter, err := ratelimiter.NewRateLimiterUsingRedis(redisConfig)
-limiter.RateLimit(handlerFunc, urlPath, config, errorResponseFunc, rateLimitValueFunc)
+limiter, err := ratelimiter.NewRateLimiterUsingRedis(redisHost, redisPassword)
+limiter.RateLimit(handlerFunc, path, config, errorResponseFunc, rateLimitValueFunc)
+//Every parameter is same as above
 
-//Everything is same except for redisConfig
-redisConfig := &ratelimiter.RedisConfig{
-    Host     string
-    Password string
-}
 ```
 ```go
 //In both of the above cases, the error and infos are logged with default go logger. You can either disable the logs
@@ -97,10 +93,7 @@ func main() {
     // You can set logger to nil if you dont want to ratelimiter to log anything
     // You can also set looger to your own logger that follows LeveledLogger interface
     memoryLimiter.SetLogger(nil)
-    redisLimiter, err := ratelimiter.NewRateLimiterUsingRedis(&ratelimiter.RedisConfig{
-        Host:     "0.0.0.0:6379",
-        Password: "redis_password",
-    })
+    redisLimiter, err := ratelimiter.NewRateLimiterUsingRedis("0.0.0.0:6379", "redis_password")
     if err != nil {
         log.Fatalf("Error creating limiter: %v", err)
     }

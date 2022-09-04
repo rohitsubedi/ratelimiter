@@ -16,6 +16,9 @@ const (
 	statusCodeSuccess    = http.StatusOK
 	statusCodeBruteForce = http.StatusBadRequest
 	skipRateLimitValue   = "123"
+
+	redisHost     = "0.0.0.0:6379"
+	redisPassword = "redis_password"
 )
 
 type config struct{}
@@ -208,10 +211,7 @@ func TestRateLimitInRedis(t *testing.T) {
 		return rateLimitValue
 	}
 
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "redis_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis(redisHost, redisPassword)
 	assert.NoError(t, err)
 	rateLimiter.SetLogger(new(logger))
 
@@ -250,10 +250,7 @@ func TestRateLimitInRedis_SkipRateLimit(t *testing.T) {
 		return skipRateLimitValue
 	}
 
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "redis_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis(redisHost, redisPassword)
 	assert.NoError(t, err)
 	rateLimiter.SetLogger(new(logger))
 
@@ -269,10 +266,7 @@ func TestRateLimitInRedis_SkipRateLimit(t *testing.T) {
 }
 
 func TestNewRateLimiterUsingRedis_InvalidPassword(t *testing.T) {
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "wrong_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis("invalidHost", redisPassword)
 	assert.Error(t, err)
 	assert.Nil(t, rateLimiter)
 }

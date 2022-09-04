@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	ErrMsgGettingValueFromCache    = "Error getting value from cache"
 	ErrMsgPossibleBruteForceAttack = "Possible Brute Force Attack"
 
 	msgRateLimitValueEmpty          = "Rate Limit value is empty"
@@ -16,6 +15,8 @@ const (
 	msgRateLimitValueSkipped        = "Rate Limit check skipped"
 	defaultTimeToCheckForRateLimit  = 10 * time.Minute
 	maxNumberOfRequestAllowedInTime = 100
+
+	cachePathKeySeparator = "||||"
 )
 
 type HandlerWrapperFunc func(res http.ResponseWriter, req *http.Request)
@@ -29,8 +30,9 @@ type ConfigReaderInterface interface {
 }
 
 type cacheInterface interface {
-	AppendEntry(key string, expirationTime time.Duration) error
-	GetCount(key string) (int, error)
+	appendEntry(key string, expirationTime time.Duration) error
+	getCount(key string, expirationTime time.Duration) int
+	addConfig(config ConfigReaderInterface)
 }
 
 type LeveledLogger interface {
@@ -65,8 +67,8 @@ func NewRateLimiterUsingMemory(cacheCleaningInterval time.Duration) Limiter {
 	}
 }
 
-func NewRateLimiterUsingRedis(redisConfig *RedisConfig) (Limiter, error) {
-	redisCache, err := newRedisCache(redisConfig.getHost(), redisConfig.getPassword())
+func NewRateLimiterUsingRedis(host, password string) (Limiter, error) {
+	redisCache, err := newRedisCache(host, password)
 	if err != nil {
 		return nil, err
 	}
@@ -94,6 +96,7 @@ func (l *limiter) RateLimit(
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
 	}
+	l.cache.addConfig(config)
 
 	return func(writer http.ResponseWriter, req *http.Request) {
 		maxRequestAllowedInTimeFrame := maxNumberOfRequestAllowedInTime
@@ -128,24 +131,17 @@ func (l *limiter) RateLimit(
 			return
 		}
 
-		cacheKey := fmt.Sprintf("%s:%s", path, rateLimitKey)
+		cacheKey := fmt.Sprintf("%s%s%s", path, cachePathKeySeparator, rateLimitKey)
+		limitCount := l.cache.getCount(cacheKey, defaultTimeFrameDurationToCheck)
 
-		val, err := l.cache.GetCount(cacheKey)
-		if err != nil {
-			logError(l.logger, ErrMsgGettingValueFromCache)
-			predefinedResponse(errorResponse, writer, ErrMsgGettingValueFromCache)
-
-			return
-		}
-
-		_ = l.cache.AppendEntry(cacheKey, defaultTimeFrameDurationToCheck)
-
-		if val >= maxRequestAllowedInTimeFrame {
+		if limitCount >= maxRequestAllowedInTimeFrame {
 			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
 			return
 		}
+
+		_ = l.cache.appendEntry(cacheKey, defaultTimeFrameDurationToCheck)
 
 		fn(writer, req)
 	}

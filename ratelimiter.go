@@ -42,7 +42,7 @@ type LeveledLogger interface {
 type Limiter interface {
 	RateLimit(
 		fn HandlerWrapperFunc,
-		urlPath string,
+		path string,
 		config ConfigReaderInterface,
 		errorResponse HttpResponseFunc,
 		rateLimitValueFunc RateLimitKeyFunc,

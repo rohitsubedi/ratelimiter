@@ -19,14 +19,13 @@ const (
 	cachePathKeySeparator = "||||"
 )
 
-type HandlerWrapperFunc func(res http.ResponseWriter, req *http.Request)
 type HttpResponseFunc func(w http.ResponseWriter, message string)
 type RateLimitKeyFunc func(req *http.Request) string
 
 type ConfigReaderInterface interface {
 	GetTimeFrameDurationToCheckRequests(path string) time.Duration
 	GetMaxRequestAllowedPerTimeFrame(path string) int
-	ShouldSkipRateLimitCheck(rateLimitKey string) bool
+	ShouldSkipRateLimitCheck(path, rateLimitKey string) bool
 }
 
 type cacheInterface interface {
@@ -41,12 +40,12 @@ type LeveledLogger interface {
 
 type Limiter interface {
 	RateLimit(
-		fn HandlerWrapperFunc,
+		fn http.HandlerFunc,
 		path string,
 		config ConfigReaderInterface,
 		errorResponse HttpResponseFunc,
 		rateLimitValueFunc RateLimitKeyFunc,
-	) HandlerWrapperFunc
+	) http.HandlerFunc
 	SetLogger(logger LeveledLogger)
 }
 
@@ -86,12 +85,12 @@ func (l *limiter) SetLogger(logger LeveledLogger) {
 }
 
 func (l *limiter) RateLimit(
-	fn HandlerWrapperFunc,
+	fn http.HandlerFunc,
 	path string,
 	config ConfigReaderInterface,
 	errorResponse HttpResponseFunc,
 	rateLimitKeyFunc RateLimitKeyFunc,
-) HandlerWrapperFunc {
+) http.HandlerFunc {
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
 	}
@@ -122,7 +121,7 @@ func (l *limiter) RateLimit(
 			return
 		}
 		// Check if config says that the rateLimit value should skip rateLimiter check
-		if config != nil && config.ShouldSkipRateLimitCheck(rateLimitKey) {
+		if config != nil && config.ShouldSkipRateLimitCheck(path, rateLimitKey) {
 			logInfo(l.logger, msgRateLimitValueSkipped)
 			fn(writer, req)
 

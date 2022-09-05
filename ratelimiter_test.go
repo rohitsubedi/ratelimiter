@@ -31,7 +31,7 @@ func (c *config) GetMaxRequestAllowedPerTimeFrame(_ string) int {
 	return 10
 }
 
-func (c *config) ShouldSkipRateLimitCheck(rateLimitValue string) bool {
+func (c *config) ShouldSkipRateLimitCheck(_, rateLimitValue string) bool {
 	return rateLimitValue == skipRateLimitValue
 }
 

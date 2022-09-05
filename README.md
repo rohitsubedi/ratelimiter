@@ -21,7 +21,8 @@ path = string (Name of your handler/ identifier)
 config = This must follow the ConfigReaderInterface. ConfigReaderInterface has 3 methods
     GetTimeFrameDurationToCheckRequests(path string) time.Duration // This returns the time frame in which the total request is counted
     GetMaxRequestAllowedPerTimeFrame(path string) int64 // Total request allwed in the time frame. If request exceed this value, it will execute errorResponseFunc
-    ShouldSkipRateLimitCheck(rateLimitValue string) bool // Skip rate limit if return true
+    ShouldSkipRateLimitCheck(path, rateLimitValue string) bool // Skip rate limit if return true
+	*If passed nil, default values will be used (100 request allowed per 10 minutes)
 errorResponseFunc = func(w http.ResponseWriter, message string) // If the request is rate limited, this method will be called
 rateLimitValueFunc = func(req *http.Request) string // This should return the value that needs to be ratelimited. For eg ip address from the request
 ```

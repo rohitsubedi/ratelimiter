@@ -123,6 +123,7 @@ func (m *memoryCache) unlinkExpiredCache() {
 				// If first item is expired, we delete all the entry of the items
 				if count == 0 {
 					delete(m.items, k)
+					delete(m.latestExpiry, k)
 					break
 				}
 

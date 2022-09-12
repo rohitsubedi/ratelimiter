@@ -8,24 +8,29 @@ import (
 )
 
 const (
-	ErrMsgGettingValueFromCache    = "Error getting value from cache"
 	ErrMsgPossibleBruteForceAttack = "Possible Brute Force Attack"
 
 	msgRateLimitValueEmpty          = "Rate Limit value is empty"
 	msgRateLimitValueFuncIsNil      = "Rate Limit value function is nil"
 	msgRateLimitValueSkipped        = "Rate Limit check skipped"
 	defaultTimeToCheckForRateLimit  = 10 * time.Minute
-	maxNumberOfRequestAllowedInTime = int64(100)
+	maxNumberOfRequestAllowedInTime = 100
+
+	cachePathKeySeparator = "||||"
 )
 
-type HandlerWrapperFunc func(res http.ResponseWriter, req *http.Request)
 type HttpResponseFunc func(w http.ResponseWriter, message string)
 type RateLimitKeyFunc func(req *http.Request) string
 
 type ConfigReaderInterface interface {
 	GetTimeFrameDurationToCheckRequests(path string) time.Duration
-	GetMaxRequestAllowedPerTimeFrame(path string) int64
-	ShouldSkipRateLimitCheck(rateLimitKey string) bool
+	GetMaxRequestAllowedPerTimeFrame(path string) int
+	ShouldSkipRateLimitCheck(path, rateLimitKey string) bool
+}
+
+type cacheInterface interface {
+	appendEntry(key string, expirationTime time.Duration) error
+	getCount(key string, expirationTime time.Duration) int
 }
 
 type LeveledLogger interface {
@@ -35,17 +40,17 @@ type LeveledLogger interface {
 
 type Limiter interface {
 	RateLimit(
-		fn HandlerWrapperFunc,
-		urlPath string,
+		fn http.HandlerFunc,
+		path string,
 		config ConfigReaderInterface,
 		errorResponse HttpResponseFunc,
 		rateLimitValueFunc RateLimitKeyFunc,
-	) HandlerWrapperFunc
+	) http.HandlerFunc
 	SetLogger(logger LeveledLogger)
 }
 
 type limiter struct {
-	cache  *cache
+	cache  cacheInterface
 	logger interface{}
 }
 
@@ -60,8 +65,8 @@ func NewRateLimiterUsingMemory(cacheCleaningInterval time.Duration) Limiter {
 	}
 }
 
-func NewRateLimiterUsingRedis(redisConfig *RedisConfig) (Limiter, error) {
-	redisCache, err := newRedisCache(redisConfig.getHost(), redisConfig.getPassword())
+func NewRateLimiterUsingRedis(host, password string) (Limiter, error) {
+	redisCache, err := newRedisCache(host, password)
 	if err != nil {
 		return nil, err
 	}
@@ -80,12 +85,12 @@ func (l *limiter) SetLogger(logger LeveledLogger) {
 }
 
 func (l *limiter) RateLimit(
-	fn HandlerWrapperFunc,
+	fn http.HandlerFunc,
 	path string,
 	config ConfigReaderInterface,
 	errorResponse HttpResponseFunc,
 	rateLimitKeyFunc RateLimitKeyFunc,
-) HandlerWrapperFunc {
+) http.HandlerFunc {
 	if fn == nil {
 		log.Fatal("Empty handler wrapper function")
 	}
@@ -116,24 +121,17 @@ func (l *limiter) RateLimit(
 			return
 		}
 		// Check if config says that the rateLimit value should skip rateLimiter check
-		if config != nil && config.ShouldSkipRateLimitCheck(rateLimitKey) {
+		if config != nil && config.ShouldSkipRateLimitCheck(path, rateLimitKey) {
 			logInfo(l.logger, msgRateLimitValueSkipped)
 			fn(writer, req)
 
 			return
 		}
 
-		cacheKey := fmt.Sprintf("%s:%s", path, rateLimitKey)
+		cacheKey := fmt.Sprintf("%s%s%s", path, cachePathKeySeparator, rateLimitKey)
+		limitCount := l.cache.getCount(cacheKey, defaultTimeFrameDurationToCheck)
 
-		val, err := l.cache.getValidCacheCount(cacheKey)
-		if err != nil {
-			logError(l.logger, ErrMsgGettingValueFromCache)
-			predefinedResponse(errorResponse, writer, ErrMsgGettingValueFromCache)
-
-			return
-		}
-
-		if val >= maxRequestAllowedInTimeFrame {
+		if limitCount >= maxRequestAllowedInTimeFrame {
 			logError(l.logger, ErrMsgPossibleBruteForceAttack)
 			predefinedResponse(errorResponse, writer, ErrMsgPossibleBruteForceAttack)
 
@@ -153,7 +151,7 @@ func predefinedResponse(response HttpResponseFunc, writer http.ResponseWriter, m
 	}
 
 	writer.WriteHeader(http.StatusBadRequest)
-	writer.Write([]byte(msg))
+	_, _ = writer.Write([]byte(msg))
 }
 
 func logInfo(logger interface{}, msg string) {

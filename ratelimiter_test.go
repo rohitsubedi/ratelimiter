@@ -16,19 +16,22 @@ const (
 	statusCodeSuccess    = http.StatusOK
 	statusCodeBruteForce = http.StatusBadRequest
 	skipRateLimitValue   = "123"
+
+	redisHost     = "0.0.0.0:6379"
+	redisPassword = "redis_password"
 )
 
 type config struct{}
 
-func (c *config) GetTimeFrameDurationToCheckRequests(path string) time.Duration {
+func (c *config) GetTimeFrameDurationToCheckRequests(_ string) time.Duration {
 	return 2 * time.Second
 }
 
-func (c *config) GetMaxRequestAllowedPerTimeFrame(path string) int64 {
+func (c *config) GetMaxRequestAllowedPerTimeFrame(_ string) int {
 	return 10
 }
 
-func (c *config) ShouldSkipRateLimitCheck(rateLimitValue string) bool {
+func (c *config) ShouldSkipRateLimitCheck(_, rateLimitValue string) bool {
 	return rateLimitValue == skipRateLimitValue
 }
 
@@ -39,7 +42,7 @@ func TestRateLimitInMemory(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, message string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return rateLimitValue
@@ -49,11 +52,11 @@ func TestRateLimitInMemory(t *testing.T) {
 	rateLimiter := NewRateLimiterUsingMemory(conf.GetTimeFrameDurationToCheckRequests(""))
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, errorResp, limitValFunc)
 
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue
@@ -75,7 +78,7 @@ func TestRateLimitInMemoryWithNilLogger(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, message string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return rateLimitValue
@@ -86,11 +89,11 @@ func TestRateLimitInMemoryWithNilLogger(t *testing.T) {
 	rateLimiter.SetLogger(nil)
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, errorResp, limitValFunc)
 
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue
@@ -112,7 +115,7 @@ func TestRateLimitInMemoryEmptyConfig(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, message string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return rateLimitValue
@@ -136,7 +139,7 @@ func TestRateLimitInMemoryRateLimiterValFuncNil(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, message string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return ""
@@ -160,7 +163,7 @@ func TestRateLimitInMemoryRateLimiterValFuncReturnsEmpty(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, message string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(message))
+		_, _ = w.Write([]byte(message))
 	}
 
 	rateLimiter := NewRateLimiterUsingMemory(10 * time.Minute)
@@ -180,7 +183,7 @@ func TestRateLimitInMemory_SkipRateLimit(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, msg string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(msg))
+		_, _ = w.Write([]byte(msg))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return skipRateLimitValue
@@ -191,7 +194,7 @@ func TestRateLimitInMemory_SkipRateLimit(t *testing.T) {
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, errorResp, limitValFunc)
 
 	// All request should pass even the request is double the threshold
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 		assert.Equal(t, resp.Code, statusCodeSuccess)
@@ -208,21 +211,18 @@ func TestRateLimitInRedis(t *testing.T) {
 		return rateLimitValue
 	}
 
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "redis_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis(redisHost, redisPassword)
 	assert.NoError(t, err)
 	rateLimiter.SetLogger(new(logger))
 
 	conf := new(config)
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, nil, limitValFunc)
 
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 
-		if int64(i) >= conf.GetMaxRequestAllowedPerTimeFrame("") {
+		if i >= conf.GetMaxRequestAllowedPerTimeFrame("") {
 			assert.Equal(t, resp.Code, statusCodeBruteForce)
 			assert.Equal(t, resp.Body.Bytes(), []byte(ErrMsgPossibleBruteForceAttack))
 			continue
@@ -244,16 +244,13 @@ func TestRateLimitInRedis_SkipRateLimit(t *testing.T) {
 	}
 	errorResp := func(w http.ResponseWriter, msg string) {
 		w.WriteHeader(statusCodeBruteForce)
-		w.Write([]byte(msg))
+		_, _ = w.Write([]byte(msg))
 	}
 	limitValFunc := func(req *http.Request) string {
 		return skipRateLimitValue
 	}
 
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "redis_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis(redisHost, redisPassword)
 	assert.NoError(t, err)
 	rateLimiter.SetLogger(new(logger))
 
@@ -261,7 +258,7 @@ func TestRateLimitInRedis_SkipRateLimit(t *testing.T) {
 	wrapper := rateLimiter.RateLimit(handlerFunc, "Login", conf, errorResp, limitValFunc)
 
 	// All request should pass even the request is double the threshold
-	for i := 0; i < int(2*conf.GetMaxRequestAllowedPerTimeFrame("")); i++ {
+	for i := 0; i < 2*conf.GetMaxRequestAllowedPerTimeFrame(""); i++ {
 		resp := &httptest.ResponseRecorder{Body: new(bytes.Buffer)}
 		wrapper(resp, new(http.Request))
 		assert.Equal(t, resp.Code, statusCodeSuccess)
@@ -269,10 +266,7 @@ func TestRateLimitInRedis_SkipRateLimit(t *testing.T) {
 }
 
 func TestNewRateLimiterUsingRedis_InvalidPassword(t *testing.T) {
-	rateLimiter, err := NewRateLimiterUsingRedis(&RedisConfig{
-		Host:     "0.0.0.0:6379",
-		Password: "wrong_password",
-	})
+	rateLimiter, err := NewRateLimiterUsingRedis("invalidHost", redisPassword)
 	assert.Error(t, err)
 	assert.Nil(t, rateLimiter)
 }
